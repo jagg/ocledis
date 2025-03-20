@@ -1,6 +1,0 @@
-# dune init project ocledis
-# OCAMLPARAM: unset
-# Shared cache: enabled-except-user-rules
-# Shared cache location: /home/tony/.cache/dune/db
-# Workspace root: /home/tony/projects/ocaml/ocledis
-# Auto-detected concurrency: 4
