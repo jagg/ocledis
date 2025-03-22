@@ -27,6 +27,6 @@ let set store key value =
   Eio.Stream.add store (Set (key, value))
 
 let get store key =
-  let resolver, promise  = Promise.create () in
+  let promise, resolver  = Promise.create () in
   Eio.Stream.add store (Get (key, resolver));
   Promise.await promise

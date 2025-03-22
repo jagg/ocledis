@@ -1,5 +1,4 @@
 open! Base
-open Eio.Std
 
 type 'v t
 
