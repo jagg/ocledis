@@ -1,20 +1,29 @@
 open! Base
 open Eio.Std
 
-let handle_client store client _addr =
+
+let run_command store command = 
+  let open Kvlib.Protocol in
+  match command with
+  | Set (key, Num value) -> Store.set store key value; All_ok
+  | Set (_key, String _value) -> Error "This map only takes numbers"
+  | Get key ->
+     match Store.get store key with
+     | None -> Error "The key was not present"
+     | Some value -> Done (key, Num value)
+  
+
+  
+let handle_client store flow _addr =
   traceln "[SERVER] Got a connection";
-  let reader = Eio.Buf_read.of_flow client ~max_size:2048 in
-  let bytes = Bytes.of_string @@ Eio.Buf_read.take 4 reader in
-  traceln "[SERVER] Got %d bytes" @@ Bytes.length bytes;
-  let len = Int.of_int32_exn (Stdlib.Bytes.get_int32_be bytes 0) in
-  traceln "[SERVER] Got a size: %d" len;
-  let msg = Eio.Buf_read.take len reader in
-  traceln "[SERVER] Got a key: %s" msg;
-  Store.set store msg 23;
-  let v = Store.get store msg in
-  traceln "[SERVER] I stored this: %d" @@ Option.value_exn v
-
-
+  let open Kvlib.Protocol in
+  let from_client = Eio.Buf_read.of_flow flow ~max_size:4096 in
+  Eio.Buf_write.with_flow flow @@ fun to_client ->
+                                  let query = get_commands from_client in
+                                  let query_str = Sexplib.Sexp.to_string_hum ([%sexp_of: command list] query) in
+                                  traceln "[SERVER] Query: %s" query_str;
+                                  let response = List.map ~f:(fun cmd -> run_command store cmd) query in
+                                  send_responses response to_client
 
 ;;
 
@@ -35,6 +44,7 @@ let server ~net ~addr =
 
 let () =
   Eio_main.run @@ fun env ->
-                  (* let _ = store () in *)
                   server ~net:(Eio.Stdenv.net env)
-                         ~addr:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 12342));;
+                    ~addr:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 12342))
+
+;;
