@@ -1,4 +1,6 @@
 (executable
+ (public_name ocledis.server)
+ (package ocledis)
  (name server) 
  (libraries core stdio eio_main)
  (preprocess

@@ -1,2 +1,5 @@
 (library
- (name ocledis))
+ (package ocledis)
+ (name encoding)
+ (libraries base))
+ 

@@ -1,3 +1,5 @@
 (executable
+ (public_name ocledis.client)
+ (package ocledis)
  (name client) 
- (libraries base stdio eio_main))
+ (libraries base stdio eio_main encoding))
