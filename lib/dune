@@ -1,7 +1,7 @@
 (library
  (package ocledis)
  (name kvlib)
- (libraries base eio_main)
+ (libraries base core eio_main)
  (preprocess
   (pps ppx_jane ppx_sexp_conv ppx_expect ppx_inline_test ppx_assert ppx_regexp)))
  

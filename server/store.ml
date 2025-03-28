@@ -8,15 +8,16 @@ type 'v command =
 type 'v t = 'v command Eio.Stream.t
 
 let make sw =
+
   let stream = Eio.Stream.create 120 in
-  let table = Hashtbl.create (module String) in
+  let table = Kvlib.Storage.create () in
   let rec handler () =
     match Eio.Stream.take stream with
     | Set (key, value) ->
-       let _ = Hashtbl.add table ~key ~data:value in
+       let _ = Kvlib.Storage.put table ~key ~value in
        handler ()
     | Get (key, resolver) ->
-       let value = Hashtbl.find table key in
+       let value = Kvlib.Storage.get table ~key in
        Promise.resolve resolver value;
        handler ()
   in
