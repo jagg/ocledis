@@ -5,11 +5,11 @@ open Eio.Std
 let run_command store command = 
   let open Kvlib.Protocol in
   match command with
-  | Set (key, value) -> Store.set store key value; All_ok
+  | Set (key, value) -> Store.set store key value; Stored_ok
   | Get key ->
      match Store.get store key with
      | None -> Error "The key was not present"
-     | Some value -> Done (key, value)
+     | Some value -> Got (key, value)
   
 
   

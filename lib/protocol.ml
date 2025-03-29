@@ -6,8 +6,8 @@ type command =
 [@@deriving sexp]
 
 type response =
-  | All_ok 
-  | Done of Model.Key.t * Model.value
+  | Stored_ok 
+  | Got of Model.Key.t * Model.value
   | Error of string
 [@@deriving sexp]
 
