@@ -6,7 +6,7 @@ type command =
 [@@deriving sexp]
 
 type response =
-  | Stored_ok 
+  | Committed
   | Got of Model.Key.t * Model.value
   | Error of string
 [@@deriving sexp]

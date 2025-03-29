@@ -10,7 +10,11 @@ open Base
 type t = {
   table : Storage_hashtbl.t;
   wal_path : string;
+  checkpoint_path : string;
+  mutable operations : int;
 }
+
+let max_wal_size = 10
 
 let get_num channel =
   let buffer = Bytes.create 4 in
@@ -60,9 +64,8 @@ let store_key channel = function
     Out_channel.output channel buffer 0 (Bytes.length buffer)
 
 ;;
-
-let load_table table =
-  In_channel.with_open_gen [Open_binary] 0o666 table.wal_path
+let load_data table path =
+  In_channel.with_open_gen [Open_binary] 0o666 path
     (fun channel ->
        let rec read () =
          match In_channel.input_byte channel with
@@ -87,28 +90,59 @@ let load_table table =
        read ()
     )
 
+
+let load_wal table = load_data table table.wal_path
+
+let save_checkpoint table =
+  Out_channel.with_open_gen [Open_binary; Open_creat; Open_trunc; Open_append] 0o666 table.checkpoint_path
+    (fun out ->
+       Storage_hashtbl.iter table.table ~f:(fun ~key ~data:value ->
+           Stdlib.Printf.printf "I got something";
+           store_key out key;
+           store_value out value;
+           Out_channel.flush out;
+         );
+    )
+
+let load_checkpoint table = load_data table table.checkpoint_path
+
+
 ;;
 
 let create () =
   let table = {
     table = Storage_hashtbl.create ();
     wal_path = "./storage.bin";
+    checkpoint_path = "./checkpoint.bin";
+    operations = 0;
   } in
-  if Stdlib.Sys.file_exists table.wal_path then load_table table
+  if Stdlib.Sys.file_exists table.checkpoint_path then load_checkpoint table;
+  if Stdlib.Sys.file_exists table.wal_path then
+    let _ = load_wal table in
+    save_checkpoint table; 
+    Stdlib.Sys.remove table.wal_path;
   else ();
   table
-
+    
+let iter table ~f =
+  Storage_hashtbl.iter table.table ~f
 
 let put table ~key ~value =
+  table.operations <- table.operations + 1;
   Out_channel.with_open_gen [Open_binary; Open_creat; Open_append] 0o666 table.wal_path
     (fun wal ->
        store_key wal key;
        store_value wal value;
        Out_channel.flush wal;
        Storage_hashtbl.put table.table ~key ~value;
-    )
+    );
+  if table.operations > max_wal_size then
+    let _ = save_checkpoint table in
+    Stdlib.Sys.remove table.wal_path;
+    table.operations <- 0;
+
+
 
 ;;
 
 let get table ~key = Storage_hashtbl.get table.table ~key
-    

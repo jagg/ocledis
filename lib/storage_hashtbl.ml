@@ -9,3 +9,6 @@ let put table ~key ~value =
 
 let get table ~key =
   Hashtbl.find table key
+
+let iter table ~f =
+  Hashtbl.iteri table ~f
