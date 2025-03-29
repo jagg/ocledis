@@ -1,11 +1,13 @@
 open! Base
 open Eio.Std
 
-type 'v command =
-  | Set of string * 'v
-  | Get of string * ('v option Promise.u)
+module Model = Kvlib.Model 
 
-type 'v t = 'v command Eio.Stream.t
+type command =
+  | Set of Model.Key.t * Model.value
+  | Get of Model.Key.t * (Model.value option Promise.u)
+
+type t = command Eio.Stream.t
 
 let make sw =
 

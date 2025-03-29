@@ -7,14 +7,14 @@ open Base
     different approaches in the Server *)
 
 
-type 'v t = {
-  table : 'v Storage_hashtbl.t;
+type t = {
+  table : Storage_hashtbl.t;
   wal : Out_channel.t;
 }
 
 let create () = {
   table = Storage_hashtbl.create ();
-  wal = Out_channel.open_gen [Open_binary; Open_creat; Open_append] 777 "./storage.bin";
+  wal = Out_channel.open_gen [Open_binary; Open_creat; Open_append] 666 "./storage.bin";
 }
 
 let put table ~key ~value =

@@ -1,8 +1,8 @@
 open! Base
 
 (** I should be able to generalize on the key using Functors *)
-type 'v t
+type t
 
-val create :  unit -> 'v t
-val put : 'v t -> key:string -> value:'v -> unit 
-val get : 'v t -> key:string -> 'v option
+val create :  unit -> t
+val put : t -> key:Model.Key.t -> value:Model.value -> unit 
+val get : t -> key:Model.Key.t -> Model.value option

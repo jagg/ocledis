@@ -1,7 +1,7 @@
 open! Base
 
-type 'v t
+type t
 
-val make : Eio.Switch.t -> 'v t
-val set : 'v t -> string -> 'v -> unit
-val get : 'v t -> string -> 'v option 
+val make : Eio.Switch.t -> t
+val set : t -> Kvlib.Model.Key.t -> Kvlib.Model.value -> unit
+val get : t -> Kvlib.Model.Key.t -> Kvlib.Model.value option 

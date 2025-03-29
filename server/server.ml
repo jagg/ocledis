@@ -5,12 +5,11 @@ open Eio.Std
 let run_command store command = 
   let open Kvlib.Protocol in
   match command with
-  | Set (key, Num value) -> Store.set store key value; All_ok
-  | Set (_key, String _value) -> Error "This map only takes numbers"
+  | Set (key, value) -> Store.set store key value; All_ok
   | Get key ->
      match Store.get store key with
      | None -> Error "The key was not present"
-     | Some value -> Done (key, Num value)
+     | Some value -> Done (key, value)
   
 
   

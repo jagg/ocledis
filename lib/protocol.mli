@@ -1,18 +1,13 @@
 open! Base
 
-type value =
-  | Num of int32
-  | String of string
-[@@deriving sexp]
-
 type command =
-  | Set of string * value
-  | Get of string
+  | Set of Model.Key.t * Model.value
+  | Get of Model.Key.t
 [@@deriving sexp]
 
 type response =
   | All_ok
-  | Done of string * value 
+  | Done of Model.Key.t * Model.value 
   | Error of string
 [@@deriving sexp]
 
