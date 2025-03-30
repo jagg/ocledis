@@ -9,8 +9,11 @@ open Base
 
 type t = {
   table : Storage_hashtbl.t;
+  (** The path to the file storing the write ahead log *)
   wal_path : string;
+  (** The path to the file storing the checkpoint *)
   checkpoint_path : string;
+  (** The number of operations we have so far, to trigger the checkpoint save*)
   mutable operations : int;
 }
 
@@ -97,7 +100,6 @@ let save_checkpoint table =
   Out_channel.with_open_gen [Open_binary; Open_creat; Open_trunc; Open_append] 0o666 table.checkpoint_path
     (fun out ->
        Storage_hashtbl.iter table.table ~f:(fun ~key ~data:value ->
-           Stdlib.Printf.printf "I got something";
            store_key out key;
            store_value out value;
            Out_channel.flush out;

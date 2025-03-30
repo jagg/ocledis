@@ -1,7 +1,7 @@
 open! Core
 open! Core_bench
 
-(**dune exec -- ./bench.exe -ascii -quota 0.25 *) 
+(** dune exec -- ./bench.exe -ascii -quota 0.25 *) 
 let amount = 1000
 let value_pairs =
   List.init amount ~f:(fun i -> ("key" ^ string_of_int i, Int32.of_int_exn i))
