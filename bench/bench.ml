@@ -10,7 +10,7 @@ module type Storage = sig
   type t
 
   val create :  unit -> t
-  val put : t -> key:Kvlib.Model.Key.t -> value:Kvlib.Model.value -> unit 
+  val put : t -> key:Kvlib.Model.Key.t -> value:Kvlib.Model.value -> unit Or_error.t
   val get : t -> key:Kvlib.Model.Key.t -> Kvlib.Model.value option
 end
 
@@ -21,7 +21,7 @@ module Bench (S : Storage) = struct
       ~f:(fun (key, value) ->
           let key = Kvlib.Model.Key.String key in
           let value = Kvlib.Model.Num value in
-          S.put table ~key ~value;
+          Or_error.ok_exn @@ S.put table ~key ~value;
           let _ = S.get table ~key in
           ()
         )

@@ -67,7 +67,7 @@ let store_key channel = function
     Out_channel.output channel buffer 0 (Bytes.length buffer)
 
 ;;
-let load_data table path =
+let load_data_exn table path =
   In_channel.with_open_gen [Open_binary] 0o666 path
     (fun channel ->
        let rec read () =
@@ -94,7 +94,7 @@ let load_data table path =
     )
 
 
-let load_wal table = load_data table table.wal_path
+let load_wal_exn table = load_data_exn table table.wal_path
 
 let save_checkpoint table =
   Out_channel.with_open_gen [Open_binary; Open_creat; Open_trunc; Open_append] 0o666 table.checkpoint_path
@@ -109,7 +109,7 @@ let save_checkpoint table =
          );
     )
 
-let load_checkpoint table = load_data table table.checkpoint_path
+let load_checkpoint table = load_data_exn table table.checkpoint_path
 
 
 ;;
@@ -123,7 +123,7 @@ let create () =
   } in
   if Stdlib.Sys.file_exists table.checkpoint_path then load_checkpoint table;
   if Stdlib.Sys.file_exists table.wal_path then
-    let _ = load_wal table in
+    let _ = load_wal_exn table in
     save_checkpoint table; 
     Stdlib.Sys.remove table.wal_path;
   else ();
@@ -133,13 +133,15 @@ let iter table ~f =
   Storage_hashtbl.iter table.table ~f
 
 let put table ~key ~value =
+  Or_error.try_with @@ fun () ->
   table.operations <- table.operations + 1;
   Out_channel.with_open_gen [Open_binary; Open_creat; Open_append] 0o666 table.wal_path
     (fun wal ->
        store_key wal key;
        store_value wal value;
        Out_channel.flush wal;
-       Storage_hashtbl.put table.table ~key ~value;
+       let result = Storage_hashtbl.put table.table ~key ~value in
+       Or_error.ok_exn result
     );
   if table.operations > max_wal_size then
     let _ = save_checkpoint table in
