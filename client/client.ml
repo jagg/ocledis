@@ -25,5 +25,5 @@ let client ~net ~addr =
 
 let () =
   Eio_main.run @@ fun env ->
-                  client ~net:(Eio.Stdenv.net env)
-                  ~addr:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 12342));;
+  client ~net:(Eio.Stdenv.net env)
+         ~addr:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 12342));;

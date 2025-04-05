@@ -102,6 +102,9 @@ let save_checkpoint table =
        Storage_hashtbl.iter table.table ~f:(fun ~key ~data:value ->
            store_key out key;
            store_value out value;
+           (** TODO This is not safe, it should be calling fsync, flush does not guarantee persistence
+               https://transactional.blog/how-to-learn/disk-io
+           *)
            Out_channel.flush out;
          );
     )
