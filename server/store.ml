@@ -34,8 +34,6 @@ let make sw pool =
         handler);
   stream
 
-;;
-
 let set store key value =
   let promise, resolver  = Promise.create () in
   Eio.Stream.add store (Set (key, value, resolver));
