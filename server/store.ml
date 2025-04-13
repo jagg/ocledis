@@ -11,11 +11,12 @@ type t = command Eio.Stream.t
 
 let make sw pool =
   let stream = Eio.Stream.create 120 in
-  let table = Kvlib.Storage.create () in
+  let store = Kvlib.Store.make Kvlib.Store.default_config in
   let rec handler () =
     match Eio.Stream.take stream with
     | Set (key, value, resolver) ->
-      let _ = match Kvlib.Storage.put table ~key ~value with
+      let op = Model.Set (key,value) in
+      let _ = match Kvlib.Store.update store op with
         | Ok _ ->
           Promise.resolve resolver "Commited";
         | Error e ->
@@ -24,7 +25,7 @@ let make sw pool =
       in
       handler ()
     | Get (key, resolver) ->
-      let value = Kvlib.Storage.get table ~key in
+      let value = Kvlib.Store.get store key in
       Promise.resolve resolver value;
       handler ()
   in
