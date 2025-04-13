@@ -5,7 +5,6 @@ type value =
   | String of string
 [@@deriving sexp]
 
-
 module Key = struct
   type t =
     | Num of int32
@@ -19,3 +18,8 @@ module Key = struct
   let equal (a: t) (b: t) =
     compare a b = 0
 end
+
+type update_op =
+  | Set of Key.t * value
+  | Delete of Key.t
+[@@deriving sexp]

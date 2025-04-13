@@ -1,7 +1,13 @@
 open! Base
 
+type disk_config = {
+  wal_path : string;
+  checkpoint_path : string;
+}
+[@@deriving sexp]
+
 type t = {
-  config : Store.disk_config;
+  config : disk_config;
 }
 
 let get_num channel =
@@ -92,7 +98,7 @@ let checkpoint disk mem =
 
 let load_checkpoint mem disk = load_data_exn mem disk.config.checkpoint_path
 
-let process disk (op:Store.update_op) =
+let process disk (op:Model.update_op) =
   Or_error.try_with @@ fun () ->
   Out_channel.with_open_gen [Open_binary; Open_creat; Open_append] 0o666 disk.config.wal_path
     (fun wal ->
