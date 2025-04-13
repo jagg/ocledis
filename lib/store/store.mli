@@ -17,3 +17,4 @@ type config = {
 val make : config -> t
 val update : t -> Model.update_op -> unit Or_error.t
 val get : t -> Model.Key.t -> Model.value option
+val default_config : config

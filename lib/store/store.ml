@@ -18,6 +18,19 @@ type t = {
   mutable op_count : int;
 }
 
+let default_config = {
+  replica = {
+    replicas = [ ("127.0.0.1", 7777) ];
+    quorum = 2;
+  };
+  disk = {
+    wal_path = "./wal.bin";
+    checkpoint_path = "checkpoint.bin";
+  };
+  mode = Leader;
+}
+
+
 let make (config: config) =
   let mem = Memory_store.make () in
   {
@@ -33,7 +46,7 @@ let update store op =
   let open Or_error in
   Disk_store.process store.disk op >>= fun () ->
   store.op_count <- store.op_count + 1;
-  (if store.op_count > 100 then
+  (if store.op_count > 5 then
      let () = store.op_count <- 0 in
      Disk_store.checkpoint store.disk store.mem
    else
