@@ -3,6 +3,7 @@ open! Base
 type command =
   | Set of Model.Key.t * Model.value
   | Get of Model.Key.t
+  | Delete of Model.Key.t
 [@@deriving sexp]
 
 type response =

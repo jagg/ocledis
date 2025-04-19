@@ -9,14 +9,14 @@ type command =
 
 type t = command Eio.Stream.t
 
-let make sw pool =
+let make sw net pool config =
   let stream = Eio.Stream.create 120 in
-  let store = Kvlib.Store.make Kvlib.Store.default_config in
+  let store = Kvlib.Store.make config in
   let rec handler () =
     match Eio.Stream.take stream with
     | Set (key, value, resolver) ->
       let op = Model.Set (key,value) in
-      let _ = match Kvlib.Store.update store op with
+      let _ = match Kvlib.Store.update store op sw net with
         | Ok _ ->
           Promise.resolve resolver "Commited";
         | Error e ->

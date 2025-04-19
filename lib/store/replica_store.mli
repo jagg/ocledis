@@ -9,4 +9,6 @@ type replica_config = {
 [@@deriving sexp]
 
 val make : replica_config -> t
-val update : t -> Model.update_op -> unit Or_error.t
+val update : t -> Model.update_op -> Eio.Switch.t  ->
+  [> [> `Generic ] Eio.Net.ty ] Eio.Resource.t ->
+  unit Or_error.t

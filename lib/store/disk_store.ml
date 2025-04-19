@@ -114,6 +114,7 @@ let start config mem =
   let disk = {
     config = config;
   } in
+  Eio.traceln "Starting Disk store with %s and %s" config.wal_path config.checkpoint_path;
   if Stdlib.Sys.file_exists config.checkpoint_path then load_checkpoint mem disk;
   if Stdlib.Sys.file_exists config.wal_path then
     load_wal_exn disk mem

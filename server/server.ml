@@ -4,40 +4,43 @@ open Eio.Std
 module Config = struct
   type t = {
     port : int;
-    replica_port : int;
-    checkpoint_path : string;
-    wal_path : string
+    store : Kvlib.Store.config
   }
-
 
   let default_config = {
     port = 12342;
-    replica_port = 12343;
-    checkpoint_path = "./checkpoint.bin";
-    wal_path = "./wal.bin"
+    store = Kvlib.Store.default_config;
   }
 
   let parse () = 
 
     let port = ref default_config.port in
-    let replica_port = ref default_config.replica_port in
-    let checkpoint_path = ref default_config.checkpoint_path in
-    let wal_path = ref default_config.wal_path in
+    let checkpoint_path = ref default_config.store.disk.checkpoint_path in
+    let wal_path = ref default_config.store.disk.wal_path in
+    let mode = ref "l" in
 
     let speclist = [
       ("-p", Stdlib.Arg.Set_int port, "Input  port");
-      ("-rp", Stdlib.Arg.Set_int replica_port, "Input replica port");
       ("-c", Stdlib.Arg.Set_string checkpoint_path, "Input checkpoint path");
-      ("-w", Stdlib.Arg.Set_string wal_path, "Input WAL path")
+      ("-w", Stdlib.Arg.Set_string wal_path, "Input WAL path");
+      ("-m", Stdlib.Arg.Set_string mode, "Mode: l or f")
     ] in
 
     let usage_msg = "Usage: server.exe -port 12342" in
     Stdlib.Arg.parse speclist (fun _ -> ()) usage_msg;
     {
       port = !port;
-      replica_port = !replica_port;
-      checkpoint_path = !checkpoint_path;
-      wal_path = !wal_path
+      store = {
+        mode = match !mode with
+          | "l" -> Leader;
+          | "f" -> Follower;
+          | _ -> Leader; ;
+        replica = default_config.store.replica;
+        disk = {
+          checkpoint_path = !checkpoint_path;
+          wal_path = !wal_path;
+        };
+      };
     }
 end
 
@@ -47,6 +50,7 @@ let run_command store command =
   | Set (key, value) ->
     let result = Store.set store key value in
     Save result
+  | Delete _key -> Error "Not implemented"
   | Get key ->
     match Store.get store key with
     | None -> Error "The key was not present"
@@ -72,7 +76,7 @@ let () =
   let addr = `Tcp (Eio.Net.Ipaddr.V4.loopback, config.port) in
   let net = Eio.Stdenv.net env in
   let socket = Eio.Net.listen net ~sw ~reuse_addr:true ~backlog:5 addr in
-  let store = Store.make sw pool in
+  let store = Store.make sw net pool config.store in
   traceln "[SERVER] Server ready!";
   Fiber.fork ~sw (fun () ->
       Eio.Net.run_server socket (handle_client store)

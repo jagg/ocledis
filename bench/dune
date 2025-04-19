@@ -1,7 +1,0 @@
-(executable
- (public_name ocledis.bench)
- (package ocledis)
- (name bench) 
- (libraries core core_bench stdio eio_main kvlib)
- (preprocess
-  (pps ppx_jane ppx_sexp_conv ppx_expect ppx_inline_test ppx_assert ppx_regexp)))
