@@ -6,6 +6,7 @@ module Config = struct
     port : int;
     store : Kvlib.Store.config
   }
+  [@@deriving sexp]
 
   let default_config = {
     port = 12342;
@@ -71,6 +72,8 @@ let () =
   let config = Config.parse () in
   Eio_main.run @@ fun env ->
   Switch.run ~name:"Server" @@ fun sw ->
+  let config_str = Config.sexp_of_t config in
+  traceln "Server Config:\n %s" @@ Sexp.to_string_hum config_str;
   let dm = Eio.Stdenv.domain_mgr env in
   let pool = Eio.Executor_pool.create ~sw ~domain_count:2 dm in
   let addr = `Tcp (Eio.Net.Ipaddr.V4.loopback, config.port) in
