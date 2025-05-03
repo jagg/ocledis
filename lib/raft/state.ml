@@ -2,7 +2,7 @@ open! Base
 
 module Server_id = struct
   module T = struct
-    type t = Server_id of string
+    type t = Id of string
     [@@deriving compare, sexp]
   end
   include T
@@ -19,7 +19,7 @@ module Persistent_state = struct
     (** The index within the log, so that we don't have to count every time *)
     index : int;
 
-    command : Protocol.command
+    command : Kvlib.Protocol.command
   }
   [@@deriving sexp]
   
@@ -41,6 +41,7 @@ module Volatile_state = struct
     | Leader
     | Follower
     | Candidate
+  [@@deriving sexp]
 
   type t = {
     mode : mode;
@@ -58,9 +59,11 @@ module Volatile_state = struct
     (** Index of the highest log entry know to be replicated on each server *)
     match_index : int Map.M(Server_id).t;
   }
+  [@@deriving sexp]
 end
 
 type t = {
   persistent : Persistent_state.t;
   volatile : Volatile_state.t;
 }
+[@@deriving sexp]

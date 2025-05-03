@@ -8,20 +8,25 @@ type t = {
   leader_id : State.Server_id.t;
   entries : State.Persistent_state.entry list;
 }
+[@@deriving sexp]
 
 type result = {
   success : bool;
   current_term : int;
 }
+[@@deriving sexp]
 
-let rec go_to_index log term =
+(** Assumes a log, sorted in reverse order by index, and finds the first entry
+    with the same or smaller index
+*)
+let rec go_to_index log index =
   let (current : State.Persistent_state.entry option) = List.hd log in
   match current with
   | None -> []
-  | Some entry -> if entry.term <= term then log
+  | Some entry -> if entry.index <= index then log
     else match List.tl log with
       | None -> []
-      | Some lst -> go_to_index lst term
+      | Some lst -> go_to_index lst index
 
 (** TODO
     If the commit index in the result is greater than the one in the input state
@@ -36,7 +41,7 @@ let apply operation (state : State.t) =
   in
   let new_log =
   if not outdated && term_match then
-    List.append  state.persistent.log from_index
+    List.append  operation.entries from_index
   else state.persistent.log in
   let last_index = Option.map ~f:(fun entry -> entry.index) (List.hd new_log) in
   let last_index = Option.value ~default:state.volatile.commit_index last_index in
@@ -63,4 +68,81 @@ let apply operation (state : State.t) =
       success = not outdated && term_match;
       current_term = new_state.persistent.current_term;
     }) 
+
+let%test_unit "basic" =
+  [%test_eq: int list] (List.rev [3;2;1]) [1;2;3]
+
+
+let%expect_test "go_to_index" =
+  let log : State.Persistent_state.entry list = [
+    { term = 2; index = 4; command = Get (String "test") };
+    { term = 1; index = 3; command = Get (String "test") };
+    { term = 1; index = 2; command = Get (String "test") };
+    { term = 0; index = 1; command = Get (String "test") };
+    { term = 0; index = 0; command = Get (String "test") };
+  ] in
+  let result = go_to_index log 2 in
+  Core.print_s [%sexp (result : State.Persistent_state.entry list)];
+  [%expect {|
+    (((term 1) (index 2) (command (Get (String test))))
+     ((term 0) (index 1) (command (Get (String test))))
+     ((term 0) (index 0) (command (Get (String test)))))
+    |}]
+
+
+let%expect_test "test_apply" =
+  let leader_log : State.Persistent_state.entry list = [
+    { term = 2; index = 4; command = Get (String "test") };
+    { term = 1; index = 3; command = Get (String "test") };
+  ] in
+  let log : State.Persistent_state.entry list = [
+    { term = 1; index = 2; command = Get (String "test") };
+    { term = 0; index = 1; command = Get (String "test") };
+    { term = 0; index = 0; command = Get (String "test") };
+  ] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 1;
+    voted_for = None;
+    log = log;
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Follower;
+    commit_index = 2;
+    last_applied = 2;
+    next_index = Map.empty (module State.Server_id);
+    match_index = Map.empty (module State.Server_id);
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let operation = {
+    term = 2;
+    prev_log_index = 2;
+    prev_long_term = 1;
+    leader_commit_index = 4;
+    leader_id = State.Server_id.Id "one";
+    entries = leader_log;
+  } in
+  let result = apply operation state in 
+  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
+)];
+  [%expect {|
+    (((persistent
+       ((current_term 2) (voted_for ())
+        (log
+         (((term 2) (index 4) (command (Get (String test))))
+          ((term 1) (index 3) (command (Get (String test))))
+          ((term 1) (index 2) (command (Get (String test))))
+          ((term 0) (index 1) (command (Get (String test))))
+          ((term 0) (index 0) (command (Get (String test))))))))
+      (volatile
+       ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
+        (match_index ()))))
+     (((term 1) (index 3) (command (Get (String test))))
+      ((term 2) (index 4) (command (Get (String test)))))
+     ((success true) (current_term 2)))
+    |}]
+
+
 
