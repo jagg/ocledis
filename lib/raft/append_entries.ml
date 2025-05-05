@@ -3,7 +3,7 @@ open! Base
 type t = {
   term : int;
   prev_log_index : int;
-  prev_long_term : int;
+  prev_log_term : int;
   leader_commit_index : int;
   leader_id : State.Server_id.t;
   entries : State.Persistent_state.entry list;
@@ -28,6 +28,43 @@ let rec go_to_index log index =
       | None -> []
       | Some lst -> go_to_index lst index
 
+let last_log_index (state : State.t) =
+  match List.hd state.persistent.log with
+  | None -> 0
+  | Some idx -> idx.index
+
+let last_log_term (state : State.t) =
+  match List.hd state.persistent.log with
+  | None -> 0
+  | Some idx -> idx.term
+
+let term_at_index log index =
+  match List.hd (go_to_index log index) with
+  | None -> 0
+  | Some entry -> entry.term
+
+let emit (state : State.t) (id : State.Server_id.t) =
+  let follower_next_idx = Option.value ~default:(last_log_index state + 1) @@
+    Map.find state.volatile.next_index id
+  in
+  let entries = if (last_log_index state) >= follower_next_idx then
+    List.take_while state.persistent.log
+      ~f:(fun entry -> entry.index >= follower_next_idx)
+      else []
+  in
+  {
+    term = state.persistent.current_term;
+    prev_log_index = follower_next_idx - 1;
+    prev_log_term = term_at_index state.persistent.log @@ follower_next_idx - 1;
+    leader_commit_index = state.volatile.commit_index;
+    leader_id = state.persistent.id;
+    entries;
+  }
+
+let emit_all (state : State.t) =
+  Map.fold state.volatile.next_index ~init:[]
+    ~f:(fun ~key ~data:_ acc -> (emit state key)::acc)
+
 (** TODO
     If the commit index in the result is greater than the one in the input state
     we have to apply all those updates in the system state. This is not done here!
@@ -36,8 +73,9 @@ let apply operation (state : State.t) =
   let from_index = go_to_index state.persistent.log operation.prev_log_index in
   let outdated = operation.term < state.persistent.current_term in
   let term_match = match List.hd from_index with
-    | None -> true
-    | Some entry -> entry.term = operation.prev_long_term
+    | None -> true (* If the follower log is empty we can just fill it
+                      in, as long as the leader is not outdated *)
+    | Some entry -> entry.term = operation.prev_log_term
   in
   let new_log =
   if not outdated && term_match then
@@ -85,6 +123,70 @@ let%expect_test "go_to_index" =
     |}]
 
 
+let%expect_test "test_emit_happy_path" =
+  let log : State.Persistent_state.entry list = [
+    { term = 3; index = 3; command = Get (String "test") };
+    { term = 2; index = 2; command = Get (String "test") };
+    { term = 1; index = 1; command = Get (String "test") };
+  ] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 3;
+    voted_for = None;
+    log = log;
+    id = Id "leader";
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Leader;
+    commit_index = 2;
+    last_applied = 2;
+    next_index = Map.singleton (module State.Server_id) (Id "one") 1;
+    match_index = Map.singleton (module State.Server_id) (Id "one") 0;
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let result = emit state (Id "one") in 
+  Core.print_s [%sexp (result : t)];
+  [%expect {|
+    ((term 3) (prev_log_index 0) (prev_log_term 0) (leader_commit_index 2)
+     (leader_id (Id leader))
+     (entries
+      (((term 3) (index 3) (command (Get (String test))))
+       ((term 2) (index 2) (command (Get (String test))))
+       ((term 1) (index 1) (command (Get (String test)))))))
+    |}]
+
+let%expect_test "test_emit_heartbeat" =
+  let log : State.Persistent_state.entry list = [
+    { term = 3; index = 3; command = Get (String "test") };
+    { term = 2; index = 2; command = Get (String "test") };
+    { term = 1; index = 1; command = Get (String "test") };
+  ] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 3;
+    voted_for = None;
+    log = log;
+    id = Id "leader";
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Leader;
+    commit_index = 3;
+    last_applied = 3;
+    next_index = Map.singleton (module State.Server_id) (Id "one") 4;
+    match_index = Map.singleton (module State.Server_id) (Id "one") 3;
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let result = emit state (Id "one") in 
+  Core.print_s [%sexp (result : t)];
+  [%expect {|
+    ((term 3) (prev_log_index 3) (prev_log_term 3) (leader_commit_index 3)
+     (leader_id (Id leader)) (entries ()))
+    |}]
+
 let%expect_test "test_apply_happy_path" =
   let leader_log : State.Persistent_state.entry list = [
     { term = 3; index = 4; command = Get (String "test") };
@@ -99,6 +201,7 @@ let%expect_test "test_apply_happy_path" =
     current_term = 2;
     voted_for = None;
     log = log;
+    id = Id "id";
   } in
   let (volatile : State.Volatile_state.t) = {
     mode = Follower;
@@ -114,7 +217,7 @@ let%expect_test "test_apply_happy_path" =
   let operation = {
     term = 2;
     prev_log_index = 2;
-    prev_long_term = 2;
+    prev_log_term = 2;
     leader_commit_index = 4;
     leader_id = State.Server_id.Id "one";
     entries = leader_log;
@@ -130,7 +233,8 @@ let%expect_test "test_apply_happy_path" =
           ((term 2) (index 3) (command (Get (String test))))
           ((term 2) (index 2) (command (Get (String test))))
           ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))))
+          ((term 1) (index 0) (command (Get (String test))))))
+        (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
         (match_index ()))))
@@ -138,6 +242,8 @@ let%expect_test "test_apply_happy_path" =
       ((term 3) (index 4) (command (Get (String test)))))
      ((success true) (current_term 2)))
     |}]
+
+
 
 
 let%expect_test "test_apply_disagreement" =
@@ -156,6 +262,7 @@ let%expect_test "test_apply_disagreement" =
     current_term = 2;
     voted_for = None;
     log = log;
+    id = Id "id";
   } in
   let (volatile : State.Volatile_state.t) = {
     mode = Follower;
@@ -171,7 +278,7 @@ let%expect_test "test_apply_disagreement" =
   let operation = {
     term = 3;
     prev_log_index = 2;
-    prev_long_term = 2;
+    prev_log_term = 2;
     leader_commit_index = 4;
     leader_id = State.Server_id.Id "one";
     entries = leader_log;
@@ -187,7 +294,8 @@ let%expect_test "test_apply_disagreement" =
           ((term 2) (index 3) (command (Get (String test))))
           ((term 2) (index 2) (command (Get (String test))))
           ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))))
+          ((term 1) (index 0) (command (Get (String test))))))
+        (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
         (match_index ()))))
@@ -214,6 +322,7 @@ let%expect_test "test_apply_ignore_old_leader" =
     current_term = 3;
     voted_for = None;
     log = log;
+    id = Id "id";
   } in
   let (volatile : State.Volatile_state.t) = {
     mode = Follower;
@@ -229,7 +338,7 @@ let%expect_test "test_apply_ignore_old_leader" =
   let operation = {
     term = 1;
     prev_log_index = 2;
-    prev_long_term = 1;
+    prev_log_term = 1;
     leader_commit_index = 3;
     leader_id = State.Server_id.Id "one";
     entries = leader_log;
@@ -245,7 +354,8 @@ let%expect_test "test_apply_ignore_old_leader" =
           ((term 3) (index 3) (command (Get (String test))))
           ((term 2) (index 2) (command (Get (String test))))
           ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))))
+          ((term 1) (index 0) (command (Get (String test))))))
+        (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 3) (last_applied 3) (next_index ())
         (match_index ()))))
@@ -264,6 +374,7 @@ let%expect_test "test_first_call" =
     current_term = 0;
     voted_for = None;
     log = log;
+    id = Id "id";
   } in
   let (volatile : State.Volatile_state.t) = {
     mode = Follower;
@@ -278,8 +389,8 @@ let%expect_test "test_first_call" =
   } in
   let operation = {
     term = 1;
-    prev_log_index = 0;
-    prev_long_term = 0;
+    prev_log_index = -1;
+    prev_log_term = 0;
     leader_commit_index = 1;
     leader_id = State.Server_id.Id "one";
     entries = leader_log;
@@ -292,7 +403,8 @@ let%expect_test "test_first_call" =
        ((current_term 1) (voted_for ())
         (log
          (((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))))
+          ((term 1) (index 0) (command (Get (String test))))))
+        (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 1) (last_applied 0) (next_index ())
         (match_index ()))))

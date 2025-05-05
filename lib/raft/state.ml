@@ -32,6 +32,9 @@ module Persistent_state = struct
 
     (** The log in reverse order, new entries go to the front *)
     log : entry list;
+
+    (** The id of this server *)
+    id : Server_id.t
   }
   [@@deriving sexp]
 end
