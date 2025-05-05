@@ -36,7 +36,7 @@ let apply operation (state : State.t) =
   let from_index = go_to_index state.persistent.log operation.prev_log_index in
   let outdated = operation.term < state.persistent.current_term in
   let term_match = match List.hd from_index with
-    | None -> false
+    | None -> true
     | Some entry -> entry.term = operation.prev_long_term
   in
   let new_log =
@@ -58,7 +58,6 @@ let apply operation (state : State.t) =
           state.persistent.current_term
           operation.term
     }}
-
   in
   let ops_count = new_state.volatile.commit_index - state.volatile.commit_index in
   let ops_to_apply = List.rev @@ List.take new_state.persistent.log ops_count in
@@ -68,10 +67,6 @@ let apply operation (state : State.t) =
       success = not outdated && term_match;
       current_term = new_state.persistent.current_term;
     }) 
-
-let%test_unit "basic" =
-  [%test_eq: int list] (List.rev [3;2;1]) [1;2;3]
-
 
 let%expect_test "go_to_index" =
   let log : State.Persistent_state.entry list = [
@@ -92,128 +87,13 @@ let%expect_test "go_to_index" =
 
 let%expect_test "test_apply_happy_path" =
   let leader_log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
-    { term = 1; index = 3; command = Get (String "test") };
-  ] in
-  let log : State.Persistent_state.entry list = [
-    { term = 1; index = 2; command = Get (String "test") };
-    { term = 0; index = 1; command = Get (String "test") };
-    { term = 0; index = 0; command = Get (String "test") };
-  ] in
-  let (persistent : State.Persistent_state.t) = {
-    current_term = 1;
-    voted_for = None;
-    log = log;
-  } in
-  let (volatile : State.Volatile_state.t) = {
-    mode = Follower;
-    commit_index = 2;
-    last_applied = 2;
-    next_index = Map.empty (module State.Server_id);
-    match_index = Map.empty (module State.Server_id);
-  } in
-  let (state : State.t) = {
-    persistent;
-    volatile;
-  } in
-  let operation = {
-    term = 2;
-    prev_log_index = 2;
-    prev_long_term = 1;
-    leader_commit_index = 4;
-    leader_id = State.Server_id.Id "one";
-    entries = leader_log;
-  } in
-  let result = apply operation state in 
-  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
-)];
-  [%expect {|
-    (((persistent
-       ((current_term 2) (voted_for ())
-        (log
-         (((term 2) (index 4) (command (Get (String test))))
-          ((term 1) (index 3) (command (Get (String test))))
-          ((term 1) (index 2) (command (Get (String test))))
-          ((term 0) (index 1) (command (Get (String test))))
-          ((term 0) (index 0) (command (Get (String test))))))))
-      (volatile
-       ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
-        (match_index ()))))
-     (((term 1) (index 3) (command (Get (String test))))
-      ((term 2) (index 4) (command (Get (String test)))))
-     ((success true) (current_term 2)))
-    |}]
-
-
-let%expect_test "test_apply_disagreement" =
-  let leader_log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
-    { term = 1; index = 3; command = Get (String "test") };
-  ] in
-  let log : State.Persistent_state.entry list = [
-    { term = 1; index = 4; command = Get (String "test") };
-    { term = 1; index = 3; command = Get (String "test") };
-    { term = 1; index = 2; command = Get (String "test") };
-    { term = 0; index = 1; command = Get (String "test") };
-    { term = 0; index = 0; command = Get (String "test") };
-  ] in
-  let (persistent : State.Persistent_state.t) = {
-    current_term = 1;
-    voted_for = None;
-    log = log;
-  } in
-  let (volatile : State.Volatile_state.t) = {
-    mode = Follower;
-    commit_index = 2;
-    last_applied = 2;
-    next_index = Map.empty (module State.Server_id);
-    match_index = Map.empty (module State.Server_id);
-  } in
-  let (state : State.t) = {
-    persistent;
-    volatile;
-  } in
-  let operation = {
-    term = 2;
-    prev_log_index = 2;
-    prev_long_term = 1;
-    leader_commit_index = 4;
-    leader_id = State.Server_id.Id "one";
-    entries = leader_log;
-  } in
-  let result = apply operation state in 
-  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
-)];
-  [%expect {|
-    (((persistent
-       ((current_term 2) (voted_for ())
-        (log
-         (((term 2) (index 4) (command (Get (String test))))
-          ((term 1) (index 3) (command (Get (String test))))
-          ((term 1) (index 2) (command (Get (String test))))
-          ((term 0) (index 1) (command (Get (String test))))
-          ((term 0) (index 0) (command (Get (String test))))))))
-      (volatile
-       ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
-        (match_index ()))))
-     (((term 1) (index 3) (command (Get (String test))))
-      ((term 2) (index 4) (command (Get (String test)))))
-     ((success true) (current_term 2)))
-    |}]
-
-
-
-let%expect_test "test_apply_ignore_old_leader" =
-  let leader_log : State.Persistent_state.entry list = [
-    { term = 1; index = 4; command = Get (String "test") };
-    { term = 1; index = 3; command = Get (String "test") };
-  ] in
-  let log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
+    { term = 3; index = 4; command = Get (String "test") };
     { term = 2; index = 3; command = Get (String "test") };
-    { term = 1; index = 2; command = Get (String "test") };
-    { term = 0; index = 1; command = Get (String "test") };
-    { term = 0; index = 0; command = Get (String "test") };
+  ] in
+  let log : State.Persistent_state.entry list = [
+    { term = 2; index = 2; command = Get (String "test") };
+    { term = 1; index = 1; command = Get (String "test") };
+    { term = 1; index = 0; command = Get (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 2;
@@ -232,9 +112,9 @@ let%expect_test "test_apply_ignore_old_leader" =
     volatile;
   } in
   let operation = {
-    term = 1;
+    term = 2;
     prev_log_index = 2;
-    prev_long_term = 1;
+    prev_long_term = 2;
     leader_commit_index = 4;
     leader_id = State.Server_id.Id "one";
     entries = leader_log;
@@ -246,18 +126,181 @@ let%expect_test "test_apply_ignore_old_leader" =
     (((persistent
        ((current_term 2) (voted_for ())
         (log
-         (((term 2) (index 4) (command (Get (String test))))
+         (((term 3) (index 4) (command (Get (String test))))
           ((term 2) (index 3) (command (Get (String test))))
-          ((term 1) (index 2) (command (Get (String test))))
-          ((term 0) (index 1) (command (Get (String test))))
-          ((term 0) (index 0) (command (Get (String test))))))))
+          ((term 2) (index 2) (command (Get (String test))))
+          ((term 1) (index 1) (command (Get (String test))))
+          ((term 1) (index 0) (command (Get (String test))))))))
       (volatile
        ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
         (match_index ()))))
      (((term 2) (index 3) (command (Get (String test))))
-      ((term 2) (index 4) (command (Get (String test)))))
-     ((success false) (current_term 2)))
+      ((term 3) (index 4) (command (Get (String test)))))
+     ((success true) (current_term 2)))
     |}]
+
+
+let%expect_test "test_apply_disagreement" =
+  let leader_log : State.Persistent_state.entry list = [
+    { term = 3; index = 4; command = Get (String "test") };
+    { term = 2; index = 3; command = Get (String "test") };
+  ] in
+  let log : State.Persistent_state.entry list = [
+    { term = 2; index = 4; command = Get (String "test") };
+    { term = 2; index = 3; command = Get (String "test") };
+    { term = 2; index = 2; command = Get (String "test") };
+    { term = 1; index = 1; command = Get (String "test") };
+    { term = 1; index = 0; command = Get (String "test") };
+  ] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 2;
+    voted_for = None;
+    log = log;
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Follower;
+    commit_index = 2;
+    last_applied = 2;
+    next_index = Map.empty (module State.Server_id);
+    match_index = Map.empty (module State.Server_id);
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let operation = {
+    term = 3;
+    prev_log_index = 2;
+    prev_long_term = 2;
+    leader_commit_index = 4;
+    leader_id = State.Server_id.Id "one";
+    entries = leader_log;
+  } in
+  let result = apply operation state in 
+  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
+)];
+  [%expect {|
+    (((persistent
+       ((current_term 3) (voted_for ())
+        (log
+         (((term 3) (index 4) (command (Get (String test))))
+          ((term 2) (index 3) (command (Get (String test))))
+          ((term 2) (index 2) (command (Get (String test))))
+          ((term 1) (index 1) (command (Get (String test))))
+          ((term 1) (index 0) (command (Get (String test))))))))
+      (volatile
+       ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
+        (match_index ()))))
+     (((term 2) (index 3) (command (Get (String test))))
+      ((term 3) (index 4) (command (Get (String test)))))
+     ((success true) (current_term 3)))
+    |}]
+
+
+
+let%expect_test "test_apply_ignore_old_leader" =
+  let leader_log : State.Persistent_state.entry list = [
+    { term = 2; index = 4; command = Get (String "test") };
+    { term = 2; index = 3; command = Get (String "test") };
+  ] in
+  let log : State.Persistent_state.entry list = [
+    { term = 3; index = 4; command = Get (String "test") };
+    { term = 3; index = 3; command = Get (String "test") };
+    { term = 2; index = 2; command = Get (String "test") };
+    { term = 1; index = 1; command = Get (String "test") };
+    { term = 1; index = 0; command = Get (String "test") };
+  ] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 3;
+    voted_for = None;
+    log = log;
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Follower;
+    commit_index = 3;
+    last_applied = 3;
+    next_index = Map.empty (module State.Server_id);
+    match_index = Map.empty (module State.Server_id);
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let operation = {
+    term = 1;
+    prev_log_index = 2;
+    prev_long_term = 1;
+    leader_commit_index = 3;
+    leader_id = State.Server_id.Id "one";
+    entries = leader_log;
+  } in
+  let result = apply operation state in 
+  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
+)];
+  [%expect {|
+    (((persistent
+       ((current_term 3) (voted_for ())
+        (log
+         (((term 3) (index 4) (command (Get (String test))))
+          ((term 3) (index 3) (command (Get (String test))))
+          ((term 2) (index 2) (command (Get (String test))))
+          ((term 1) (index 1) (command (Get (String test))))
+          ((term 1) (index 0) (command (Get (String test))))))))
+      (volatile
+       ((mode Follower) (commit_index 3) (last_applied 3) (next_index ())
+        (match_index ()))))
+     () ((success false) (current_term 3)))
+    |}]
+
+
+
+let%expect_test "test_first_call" =
+  let leader_log : State.Persistent_state.entry list = [
+    { term = 1; index = 1; command = Get (String "test") };
+    { term = 1; index = 0; command = Get (String "test") };
+  ] in
+  let log : State.Persistent_state.entry list = [] in
+  let (persistent : State.Persistent_state.t) = {
+    current_term = 0;
+    voted_for = None;
+    log = log;
+  } in
+  let (volatile : State.Volatile_state.t) = {
+    mode = Follower;
+    commit_index = 0;
+    last_applied = 0;
+    next_index = Map.empty (module State.Server_id);
+    match_index = Map.empty (module State.Server_id);
+  } in
+  let (state : State.t) = {
+    persistent;
+    volatile;
+  } in
+  let operation = {
+    term = 1;
+    prev_log_index = 0;
+    prev_long_term = 0;
+    leader_commit_index = 1;
+    leader_id = State.Server_id.Id "one";
+    entries = leader_log;
+  } in
+  let result = apply operation state in 
+  Core.print_s [%sexp (result : State.t * State.Persistent_state.entry list * result
+)];
+  [%expect {|
+    (((persistent
+       ((current_term 1) (voted_for ())
+        (log
+         (((term 1) (index 1) (command (Get (String test))))
+          ((term 1) (index 0) (command (Get (String test))))))))
+      (volatile
+       ((mode Follower) (commit_index 1) (last_applied 0) (next_index ())
+        (match_index ()))))
+     (((term 1) (index 1) (command (Get (String test)))))
+     ((success true) (current_term 1)))
+    |}]
+
+
 
 
 
