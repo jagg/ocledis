@@ -19,7 +19,7 @@ module Persistent_state = struct
     (** The index within the log, so that we don't have to count every time *)
     index : int;
 
-    command : Kvlib.Protocol.command
+    command : Kvlib.Model.update_op;
   }
   [@@deriving sexp]
   
@@ -70,3 +70,14 @@ type t = {
   volatile : Volatile_state.t;
 }
 [@@deriving sexp]
+
+let last_log_index (state : t) =
+  match List.hd state.persistent.log with
+  | None -> 0
+  | Some idx -> idx.index
+
+let last_log_term (state : t) =
+  match List.hd state.persistent.log with
+  | None -> 0
+  | Some idx -> idx.term
+

@@ -28,26 +28,16 @@ let rec go_to_index log index =
       | None -> []
       | Some lst -> go_to_index lst index
 
-let last_log_index (state : State.t) =
-  match List.hd state.persistent.log with
-  | None -> 0
-  | Some idx -> idx.index
-
-let last_log_term (state : State.t) =
-  match List.hd state.persistent.log with
-  | None -> 0
-  | Some idx -> idx.term
-
 let term_at_index log index =
   match List.hd (go_to_index log index) with
   | None -> 0
   | Some entry -> entry.term
 
 let emit (state : State.t) (id : State.Server_id.t) =
-  let follower_next_idx = Option.value ~default:(last_log_index state + 1) @@
+  let follower_next_idx = Option.value ~default:(State.last_log_index state + 1) @@
     Map.find state.volatile.next_index id
   in
-  let entries = if (last_log_index state) >= follower_next_idx then
+  let entries = if (State.last_log_index state) >= follower_next_idx then
     List.take_while state.persistent.log
       ~f:(fun entry -> entry.index >= follower_next_idx)
       else []
@@ -83,6 +73,11 @@ let apply operation (state : State.t) =
   else state.persistent.log in
   let last_index = Option.map ~f:(fun entry -> entry.index) (List.hd new_log) in
   let last_index = Option.value ~default:state.volatile.commit_index last_index in
+  let new_vote = if operation.term > state.persistent.current_term then
+      None
+    else
+      state.persistent.voted_for
+  in
   let new_state : State.t = {
     volatile = {
       state.volatile with commit_index = Int.min
@@ -92,6 +87,7 @@ let apply operation (state : State.t) =
     persistent = {
       state.persistent with
       log = new_log;
+      voted_for = new_vote;
       current_term = Int.max
           state.persistent.current_term
           operation.term
@@ -108,26 +104,26 @@ let apply operation (state : State.t) =
 
 let%expect_test "go_to_index" =
   let log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
-    { term = 1; index = 3; command = Get (String "test") };
-    { term = 1; index = 2; command = Get (String "test") };
-    { term = 0; index = 1; command = Get (String "test") };
-    { term = 0; index = 0; command = Get (String "test") };
+    { term = 2; index = 4; command = Delete (String "test") };
+    { term = 1; index = 3; command = Delete (String "test") };
+    { term = 1; index = 2; command = Delete (String "test") };
+    { term = 0; index = 1; command = Delete (String "test") };
+    { term = 0; index = 0; command = Delete (String "test") };
   ] in
   let result = go_to_index log 2 in
   Core.print_s [%sexp (result : State.Persistent_state.entry list)];
   [%expect {|
-    (((term 1) (index 2) (command (Get (String test))))
-     ((term 0) (index 1) (command (Get (String test))))
-     ((term 0) (index 0) (command (Get (String test)))))
+    (((term 1) (index 2) (command (Delete (String test))))
+     ((term 0) (index 1) (command (Delete (String test))))
+     ((term 0) (index 0) (command (Delete (String test)))))
     |}]
 
 
 let%expect_test "test_emit_happy_path" =
   let log : State.Persistent_state.entry list = [
-    { term = 3; index = 3; command = Get (String "test") };
-    { term = 2; index = 2; command = Get (String "test") };
-    { term = 1; index = 1; command = Get (String "test") };
+    { term = 3; index = 3; command = Delete (String "test") };
+    { term = 2; index = 2; command = Delete (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 3;
@@ -152,16 +148,16 @@ let%expect_test "test_emit_happy_path" =
     ((term 3) (prev_log_index 0) (prev_log_term 0) (leader_commit_index 2)
      (leader_id (Id leader))
      (entries
-      (((term 3) (index 3) (command (Get (String test))))
-       ((term 2) (index 2) (command (Get (String test))))
-       ((term 1) (index 1) (command (Get (String test)))))))
+      (((term 3) (index 3) (command (Delete (String test))))
+       ((term 2) (index 2) (command (Delete (String test))))
+       ((term 1) (index 1) (command (Delete (String test)))))))
     |}]
 
 let%expect_test "test_emit_heartbeat" =
   let log : State.Persistent_state.entry list = [
-    { term = 3; index = 3; command = Get (String "test") };
-    { term = 2; index = 2; command = Get (String "test") };
-    { term = 1; index = 1; command = Get (String "test") };
+    { term = 3; index = 3; command = Delete (String "test") };
+    { term = 2; index = 2; command = Delete (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 3;
@@ -189,13 +185,13 @@ let%expect_test "test_emit_heartbeat" =
 
 let%expect_test "test_apply_happy_path" =
   let leader_log : State.Persistent_state.entry list = [
-    { term = 3; index = 4; command = Get (String "test") };
-    { term = 2; index = 3; command = Get (String "test") };
+    { term = 3; index = 4; command = Delete (String "test") };
+    { term = 2; index = 3; command = Delete (String "test") };
   ] in
   let log : State.Persistent_state.entry list = [
-    { term = 2; index = 2; command = Get (String "test") };
-    { term = 1; index = 1; command = Get (String "test") };
-    { term = 1; index = 0; command = Get (String "test") };
+    { term = 2; index = 2; command = Delete (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
+    { term = 1; index = 0; command = Delete (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 2;
@@ -229,17 +225,17 @@ let%expect_test "test_apply_happy_path" =
     (((persistent
        ((current_term 2) (voted_for ())
         (log
-         (((term 3) (index 4) (command (Get (String test))))
-          ((term 2) (index 3) (command (Get (String test))))
-          ((term 2) (index 2) (command (Get (String test))))
-          ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))
+         (((term 3) (index 4) (command (Delete (String test))))
+          ((term 2) (index 3) (command (Delete (String test))))
+          ((term 2) (index 2) (command (Delete (String test))))
+          ((term 1) (index 1) (command (Delete (String test))))
+          ((term 1) (index 0) (command (Delete (String test))))))
         (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
         (match_index ()))))
-     (((term 2) (index 3) (command (Get (String test))))
-      ((term 3) (index 4) (command (Get (String test)))))
+     (((term 2) (index 3) (command (Delete (String test))))
+      ((term 3) (index 4) (command (Delete (String test)))))
      ((success true) (current_term 2)))
     |}]
 
@@ -248,15 +244,15 @@ let%expect_test "test_apply_happy_path" =
 
 let%expect_test "test_apply_disagreement" =
   let leader_log : State.Persistent_state.entry list = [
-    { term = 3; index = 4; command = Get (String "test") };
-    { term = 2; index = 3; command = Get (String "test") };
+    { term = 3; index = 4; command = Delete (String "test") };
+    { term = 2; index = 3; command = Delete (String "test") };
   ] in
   let log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
-    { term = 2; index = 3; command = Get (String "test") };
-    { term = 2; index = 2; command = Get (String "test") };
-    { term = 1; index = 1; command = Get (String "test") };
-    { term = 1; index = 0; command = Get (String "test") };
+    { term = 2; index = 4; command = Delete (String "test") };
+    { term = 2; index = 3; command = Delete (String "test") };
+    { term = 2; index = 2; command = Delete (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
+    { term = 1; index = 0; command = Delete (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 2;
@@ -290,17 +286,17 @@ let%expect_test "test_apply_disagreement" =
     (((persistent
        ((current_term 3) (voted_for ())
         (log
-         (((term 3) (index 4) (command (Get (String test))))
-          ((term 2) (index 3) (command (Get (String test))))
-          ((term 2) (index 2) (command (Get (String test))))
-          ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))
+         (((term 3) (index 4) (command (Delete (String test))))
+          ((term 2) (index 3) (command (Delete (String test))))
+          ((term 2) (index 2) (command (Delete (String test))))
+          ((term 1) (index 1) (command (Delete (String test))))
+          ((term 1) (index 0) (command (Delete (String test))))))
         (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 4) (last_applied 2) (next_index ())
         (match_index ()))))
-     (((term 2) (index 3) (command (Get (String test))))
-      ((term 3) (index 4) (command (Get (String test)))))
+     (((term 2) (index 3) (command (Delete (String test))))
+      ((term 3) (index 4) (command (Delete (String test)))))
      ((success true) (current_term 3)))
     |}]
 
@@ -308,15 +304,15 @@ let%expect_test "test_apply_disagreement" =
 
 let%expect_test "test_apply_ignore_old_leader" =
   let leader_log : State.Persistent_state.entry list = [
-    { term = 2; index = 4; command = Get (String "test") };
-    { term = 2; index = 3; command = Get (String "test") };
+    { term = 2; index = 4; command = Delete (String "test") };
+    { term = 2; index = 3; command = Delete (String "test") };
   ] in
   let log : State.Persistent_state.entry list = [
-    { term = 3; index = 4; command = Get (String "test") };
-    { term = 3; index = 3; command = Get (String "test") };
-    { term = 2; index = 2; command = Get (String "test") };
-    { term = 1; index = 1; command = Get (String "test") };
-    { term = 1; index = 0; command = Get (String "test") };
+    { term = 3; index = 4; command = Delete (String "test") };
+    { term = 3; index = 3; command = Delete (String "test") };
+    { term = 2; index = 2; command = Delete (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
+    { term = 1; index = 0; command = Delete (String "test") };
   ] in
   let (persistent : State.Persistent_state.t) = {
     current_term = 3;
@@ -350,11 +346,11 @@ let%expect_test "test_apply_ignore_old_leader" =
     (((persistent
        ((current_term 3) (voted_for ())
         (log
-         (((term 3) (index 4) (command (Get (String test))))
-          ((term 3) (index 3) (command (Get (String test))))
-          ((term 2) (index 2) (command (Get (String test))))
-          ((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))
+         (((term 3) (index 4) (command (Delete (String test))))
+          ((term 3) (index 3) (command (Delete (String test))))
+          ((term 2) (index 2) (command (Delete (String test))))
+          ((term 1) (index 1) (command (Delete (String test))))
+          ((term 1) (index 0) (command (Delete (String test))))))
         (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 3) (last_applied 3) (next_index ())
@@ -366,8 +362,8 @@ let%expect_test "test_apply_ignore_old_leader" =
 
 let%expect_test "test_first_call" =
   let leader_log : State.Persistent_state.entry list = [
-    { term = 1; index = 1; command = Get (String "test") };
-    { term = 1; index = 0; command = Get (String "test") };
+    { term = 1; index = 1; command = Delete (String "test") };
+    { term = 1; index = 0; command = Delete (String "test") };
   ] in
   let log : State.Persistent_state.entry list = [] in
   let (persistent : State.Persistent_state.t) = {
@@ -402,13 +398,13 @@ let%expect_test "test_first_call" =
     (((persistent
        ((current_term 1) (voted_for ())
         (log
-         (((term 1) (index 1) (command (Get (String test))))
-          ((term 1) (index 0) (command (Get (String test))))))
+         (((term 1) (index 1) (command (Delete (String test))))
+          ((term 1) (index 0) (command (Delete (String test))))))
         (id (Id id))))
       (volatile
        ((mode Follower) (commit_index 1) (last_applied 0) (next_index ())
         (match_index ()))))
-     (((term 1) (index 1) (command (Get (String test)))))
+     (((term 1) (index 1) (command (Delete (String test)))))
      ((success true) (current_term 1)))
     |}]
 
