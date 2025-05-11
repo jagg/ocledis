@@ -80,6 +80,8 @@ let () =
   let net = Eio.Stdenv.net env in
   let socket = Eio.Net.listen net ~sw ~reuse_addr:true ~backlog:5 addr in
   let store = Store.make sw net pool config.store in
+  let consensus = Raft.make "id" sw net pool config.store in
+  Raft.start consensus env;
   traceln "[SERVER] Server ready!";
   Fiber.fork ~sw (fun () ->
       Eio.Net.run_server socket (handle_client store)
