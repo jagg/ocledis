@@ -6,6 +6,7 @@ type t = {
   prev_log_term : int;
   leader_commit_index : int;
   leader_id : State.Server_id.t;
+  destination_id : State.Server_id.t;
   entries : State.Persistent_state.entry list;
 }
 [@@deriving sexp]
@@ -48,6 +49,7 @@ let emit (state : State.t) (id : State.Server_id.t) =
     prev_log_term = term_at_index state.persistent.log @@ follower_next_idx - 1;
     leader_commit_index = state.volatile.commit_index;
     leader_id = state.persistent.id;
+    destination_id = id;
     entries;
   }
 
@@ -216,6 +218,7 @@ let%expect_test "test_apply_happy_path" =
     prev_log_term = 2;
     leader_commit_index = 4;
     leader_id = State.Server_id.Id "one";
+    destination_id = State.Server_id.Id "two";
     entries = leader_log;
   } in
   let result = apply operation state in 
@@ -277,6 +280,7 @@ let%expect_test "test_apply_disagreement" =
     prev_log_term = 2;
     leader_commit_index = 4;
     leader_id = State.Server_id.Id "one";
+    destination_id = State.Server_id.Id "two";
     entries = leader_log;
   } in
   let result = apply operation state in 
@@ -337,6 +341,7 @@ let%expect_test "test_apply_ignore_old_leader" =
     prev_log_term = 1;
     leader_commit_index = 3;
     leader_id = State.Server_id.Id "one";
+    destination_id = State.Server_id.Id "two";
     entries = leader_log;
   } in
   let result = apply operation state in 
@@ -389,6 +394,7 @@ let%expect_test "test_first_call" =
     prev_log_term = 0;
     leader_commit_index = 1;
     leader_id = State.Server_id.Id "one";
+    destination_id = State.Server_id.Id "two";
     entries = leader_log;
   } in
   let result = apply operation state in 
