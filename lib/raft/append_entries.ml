@@ -148,7 +148,7 @@ let%expect_test "test_emit_happy_path" =
   Core.print_s [%sexp (result : t)];
   [%expect {|
     ((term 3) (prev_log_index 0) (prev_log_term 0) (leader_commit_index 2)
-     (leader_id (Id leader))
+     (leader_id (Id leader)) (destination_id (Id one))
      (entries
       (((term 3) (index 3) (command (Delete (String test))))
        ((term 2) (index 2) (command (Delete (String test))))
@@ -182,7 +182,7 @@ let%expect_test "test_emit_heartbeat" =
   Core.print_s [%sexp (result : t)];
   [%expect {|
     ((term 3) (prev_log_index 3) (prev_log_term 3) (leader_commit_index 3)
-     (leader_id (Id leader)) (entries ()))
+     (leader_id (Id leader)) (destination_id (Id one)) (entries ()))
     |}]
 
 let%expect_test "test_apply_happy_path" =
