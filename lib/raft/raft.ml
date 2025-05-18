@@ -13,12 +13,13 @@ Eio, and run in the background
 
 type t =
   {
-    state : State.t;
+    mutable state : State.t;
     s_machine : State_machine.t;
+    system_clock : float Time.clock_ty Std.r;
     mutable timer : Switch.t option; 
   }
 
-let make id sw net pool config =
+let make id sw env net pool config =
   let (persistent : State.Persistent_state.t) = {
     current_term = 0;
     voted_for = None;
@@ -40,6 +41,7 @@ let make id sw net pool config =
     state;
     s_machine = State_machine.make sw net pool config;
     timer = None;
+    system_clock = Eio.Stdenv.clock env;
   }
 
 let trigger_election raft =
@@ -51,34 +53,48 @@ let send_heartbeat raft =
   msgs
 
 
+let rec reset_timer raft =
+  Option.iter raft.timer ~f:(fun sw ->
+      Eio.Switch.fail sw (Cancel.Cancelled Stdlib.Exit));
+  Eio.Switch.run_protected ~name:"Clock" @@ fun sw ->
+  raft.timer <- Some sw;
+  Fiber.fork ~sw (fun () ->
+      let secs = match raft.state.volatile.mode with
+        | Leader -> 200.0 /. 1000.0;
+        | Follower -> 1000.0 /. 1000.0;
+        | Candidate -> 1000.0 /. 1000.0;
+      in
+      let wait_for = secs +. Random.float secs in
+      traceln "Sleep for %.3f" wait_for;
+      Eio.Time.sleep raft.system_clock wait_for;
+      (* Trigger election and reset timer *)
+      let _ = match raft.state.volatile.mode with
+        | Leader -> traceln "Send heartbeat";
+        | Follower -> traceln "Trigger election";
+        | Candidate -> traceln "Dispair";
+      in
+      reset_timer raft
+    )
 
-let start raft env =
-  (* This is weird, do I need a new clock on every reset too? *)
-  let clock = Eio.Stdenv.clock env in
+
+let start raft =
   Random.self_init ();
+  reset_timer raft
 
-  let rec reset_timer () =
-    Option.iter raft.timer ~f:(fun sw ->
-        Eio.Switch.fail sw (Cancel.Cancelled Stdlib.Exit));
 
-    Eio.Switch.run_protected ~name:"Clock" @@ fun sw ->
-    raft.timer <- Some sw;
+let append_entries raft msg =
+  let (new_state, entries, result) = Append_entries.apply msg raft.state in
+  raft.state <- new_state;
+  if result.success then
+    reset_timer raft;
+    List.iter entries ~f:(fun entry ->
+        match entry.command with
+        | Set (key, value) -> State_machine.set raft.s_machine key value;
+        | Delete _key -> failwith "Error: Not implemented yet"
+      );
+  result
 
-    Fiber.fork ~sw (fun () ->
-        let secs = match raft.state.volatile.mode with
-          | Leader -> 200.0 /. 1000.0;
-          | Follower -> 1000.0 /. 1000.0;
-          | Candidate -> 1000.0 /. 1000.0;
-        in
-        let wait_for = secs +. Random.float secs in
-        traceln "Sleep for %.3f" wait_for;
-        Eio.Time.sleep clock wait_for;
-        (* Trigger election and reset timer *)
-        let _ = match raft.state.volatile.mode with
-          | Leader -> traceln "Send heartbeat";
-          | Follower -> traceln "Trigger election";
-          | Candidate -> traceln "Dispair";
-        in
-        reset_timer ())
-  in
-  reset_timer ();
+let process_vote_request raft msg =
+  let (new_state, result) = Request_vote.apply msg raft.state in
+  raft.state <- new_state;
+  result

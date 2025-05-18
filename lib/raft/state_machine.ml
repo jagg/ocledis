@@ -39,7 +39,7 @@ let set store key value =
   let promise, resolver  = Promise.create () in
   Eio.Stream.add store (Set (key, value, resolver));
   (** We don't want to return until we know it's been committed *)
-  Promise.await promise
+  let _ = Promise.await promise in ()
 
 let get store key =
   let promise, resolver  = Promise.create () in
