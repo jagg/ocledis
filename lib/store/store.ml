@@ -15,8 +15,6 @@ type config = {
 type t = {
   mem : Memory_store.t;
   disk : Disk_store.t;
-  repl : Replica_store.t;
-  config : config;
   mutable op_count : int;
 }
 
@@ -35,24 +33,18 @@ let default_config = {
 
 let make (config: config) =
   let mem = Memory_store.make () in
-  let repl = Replica_store.make config.replica in
   {
     mem;
     disk = Disk_store.start config.disk mem;
-    repl;
-    config;
     op_count = 0;
   }
 
 let get store key =
   Memory_store.get store.mem key
 
-let update store op sw net =
+let update store op =
   let open Or_error in
   Disk_store.process store.disk op
-  >>= fun () -> match store.config.mode with
-  | Leader -> Replica_store.update store.repl op sw net
-  | Follower -> Ok ()
   >>= fun () ->
   Memory_store.update store.mem op;
   Ok ()

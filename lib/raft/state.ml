@@ -81,3 +81,26 @@ let last_log_term (state : t) =
   | None -> 0
   | Some idx -> idx.term
 
+
+let inc_last_applied (state : t) =
+  { state with
+    volatile = {
+      state.volatile with
+      last_applied = 1 + state.volatile.last_applied;
+    }
+  }
+
+let append_to_log (state : t) command =
+  let entry : Persistent_state.entry =
+    {
+      term = state.persistent.current_term;
+      index = 1 + last_log_index state;
+      command;
+    }
+  in
+  { state with
+    persistent = {
+      state.persistent with
+      log = entry :: state.persistent.log;
+    }
+  }

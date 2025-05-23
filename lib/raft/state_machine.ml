@@ -9,14 +9,14 @@ type command =
 
 type t = command Eio.Stream.t
 
-let make sw net pool config =
+let make sw pool config =
   let stream = Eio.Stream.create 120 in
   let store = Kvlib.Store.make config in
   let rec handler () =
     match Eio.Stream.take stream with
     | Set (key, value, resolver) ->
       let op = Model.Set (key,value) in
-      let _ = match Kvlib.Store.update store op sw net with
+      let _ = match Kvlib.Store.update store op with
         | Ok _ ->
           Promise.resolve resolver "Commited";
         | Error e ->
@@ -39,7 +39,7 @@ let set store key value =
   let promise, resolver  = Promise.create () in
   Eio.Stream.add store (Set (key, value, resolver));
   (** We don't want to return until we know it's been committed *)
-  let _ = Promise.await promise in ()
+  Promise.await promise
 
 let get store key =
   let promise, resolver  = Promise.create () in

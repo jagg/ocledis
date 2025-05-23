@@ -16,9 +16,7 @@ type config = {
 
 val make : config -> t
 
-val update : t -> Model.update_op -> Eio.Switch.t ->
-  [> [> `Generic ] Eio.Net.ty ] Eio.Resource.t ->
-  unit Or_error.t
+val update : t -> Model.update_op -> unit Or_error.t
 
 val get : t -> Model.Key.t -> Model.value option
 
