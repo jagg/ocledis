@@ -1,11 +1,12 @@
-open! Base
+open! Core 
 open Eio.Std
 
 module Config = struct
   type t = {
     port : int;
     op_port : int;
-    store : Kvlib.Store.config
+    store : Kvlib.Store.config;
+    cluster : Raft.cluster_config;
   }
   [@@deriving sexp]
 
@@ -13,7 +14,16 @@ module Config = struct
     port = 12342;
     op_port = 12343;
     store = Kvlib.Store.default_config;
+    cluster =
+        {
+          replicas = Map.singleton (module Raft.Server_id) (Id "one") ("127.0.0.1", 12343);
+          quorum = 1;
+        }
   }
+
+  let load_cluster_config (file : string) : Raft.cluster_config =
+    let sexp = Sexp.load_sexp file in
+    Raft.cluster_config_of_sexp sexp
 
   let parse () = 
 
@@ -21,6 +31,7 @@ module Config = struct
     let op_port = ref default_config.op_port in
     let checkpoint_path = ref default_config.store.disk.checkpoint_path in
     let wal_path = ref default_config.store.disk.wal_path in
+    let cluster_config = ref "./cluster.conf" in
     let mode = ref "l" in
 
     let speclist = [
@@ -28,12 +39,14 @@ module Config = struct
       ("-o", Stdlib.Arg.Set_int op_port, "Operations port");
       ("-c", Stdlib.Arg.Set_string checkpoint_path, "Input checkpoint path");
       ("-w", Stdlib.Arg.Set_string wal_path, "Input WAL path");
-      ("-m", Stdlib.Arg.Set_string mode, "Mode: l or f")
+      ("-m", Stdlib.Arg.Set_string mode, "Mode: l or f");
+      ("-f", Stdlib.Arg.Set_string cluster_config, "Path to cluster configuration")
     ] in
 
     let usage_msg = "Usage: server.exe -port 12342" in
     Stdlib.Arg.parse speclist (fun _ -> ()) usage_msg;
     {
+      cluster = load_cluster_config !cluster_config;
       port = !port;
       op_port = !op_port;
       store = {

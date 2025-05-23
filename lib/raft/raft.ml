@@ -18,6 +18,8 @@ type cluster_config = {
 }
 [@@deriving sexp]
 
+module Server_id = State.Server_id
+  
 type t =
   {
     mutable state : State.t;
